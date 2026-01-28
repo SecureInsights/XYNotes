@@ -1,0 +1,91 @@
+name: Build Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '构建环境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - sit
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  build:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: 获取 pnpm store 目录
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: 设置 pnpm 缓存
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建依赖包
+        run: pnpm --stream -r --filter=!@xynotes/web build
+
+      - name: 构建依赖包 (Mac/Linux)
+        if: runner.os != 'Windows'
+        run: pnpm --stream -r --filter=!@xynotes/web build
+
+      - name: 构建 Web 应用 (生产环境)
+        if: github.event.inputs.environment == 'production' || github.event_name != 'workflow_dispatch'
+        run: |
+          cd packages/web
+          pnpm build
+
+      - name: 构建 Web 应用 (测试环境)
+        if: github.event.inputs.environment == 'sit'
+        run: |
+          cd packages/web
+          pnpm build:sit
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: xynotes-frontend-${{ github.event.inputs.environment || 'production' }}-${{ github.sha }}
+          path: packages/web/dist/
+          retention-days: 30
