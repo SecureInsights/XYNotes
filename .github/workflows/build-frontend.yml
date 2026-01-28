@@ -62,7 +62,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: 构建依赖包
         run: pnpm --stream -r --filter=!@xynotes/web build
